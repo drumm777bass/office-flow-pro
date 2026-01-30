@@ -131,7 +131,7 @@ with st.sidebar:
                 all_data.to_csv(DB_FILE, index=False); st.session_state.df = all_data; st.rerun()
 
 # --- 6. ОСНОВНОЙ ИНТЕРФЕЙС ---
-st.title("📊 Office Flow Professional")
+st.title("📊 Office Flow Professional Watafa Pepe")
 tab_tasks, tab_charts = st.tabs(["📋 ПАНЕЛЬ ЗАДАЧ", "📈 АНАЛИТИКА"])
 
 with tab_tasks:
@@ -215,4 +215,5 @@ with tab_charts:
         output = BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             all_data.to_excel(writer, index=False, sheet_name='Задачи')
+
         st.download_button(label="📊 СКАЧАТЬ EXCEL", data=output.getvalue(), file_name=f"report_{date.today()}.xlsx")
