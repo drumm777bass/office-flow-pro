@@ -96,7 +96,17 @@ def load_data():
 
 def load_chat():
     if os.path.exists(CHAT_FILE):
-        return pd.read_csv(CHAT_FILE).to_dict('records')
+        try:
+            df_chat = pd.read_csv(CHAT_FILE)
+            # Превращаем строку реакций обратно в словарь
+            import ast
+            msgs = df_chat.to_dict('records')
+            for m in msgs:
+                if isinstance(m['reactions'], str):
+                    m['reactions'] = ast.literal_eval(m['reactions'])
+            return msgs
+        except:
+            return []
     return []
 
 def save_chat(msgs):
@@ -134,12 +144,6 @@ with st.sidebar:
                     all_data.to_csv(DB_FILE, index=False); st.session_state.df = all_data; st.rerun()
             else: st.warning("Нет задач.")
 
-        with st.expander("🗑️ Удаление сотрудника"):
-            d_e = st.selectbox("Выбрать", all_emps, key="d1")
-            if st.checkbox("Подтверждаю") and st.button("УДАЛИТЬ"):
-                all_data = all_data[all_data['Исполнитель'] != d_e]
-                all_data.to_csv(DB_FILE, index=False); st.session_state.df = all_data; st.rerun()
-
 # --- 6. ОСНОВНОЙ ИНТЕРФЕЙС ---
 st.title("📊 Office Flow Pro + Chat")
 tab_tasks, tab_charts, tab_chat = st.tabs(["📋 ПАНЕЛЬ ЗАДАЧ", "📈 АНАЛИТИКА", "💬 ЧАТ"])
@@ -170,15 +174,7 @@ with tab_tasks:
             for i, emp in enumerate(emps):
                 with user_tabs[i]:
                     p_df = active_tasks[active_tasks['Исполнитель'] == emp].copy().drop(columns=['Исполнитель'])
-                    p_map = {'Высокий 🔥': 0, 'Средний ⚡': 1, 'Низкий 🧊': 2}
-                    p_df['rank'] = p_df['Приоритет'].map(p_map)
-                    p_df = p_df.sort_values('rank').drop(columns=['rank'])
-                    edited = st.data_editor(p_df, use_container_width=True, num_rows="dynamic", key=f"e_{emp}",
-                        column_config={
-                            "Статус": st.column_config.SelectboxColumn(options=["🔴 Ожидает", "🟡 В работе", "🟢 Выполнено"]),
-                            "Приоритет": st.column_config.SelectboxColumn(options=["Высокий 🔥", "Средний ⚡", "Низкий 🧊"]),
-                            "Дедлайн": st.column_config.DateColumn("Дедлайн", format="DD.MM.YYYY")
-                        })
+                    edited = st.data_editor(p_df, use_container_width=True, num_rows="dynamic", key=f"e_{emp}")
                     if st.button("💾 СОХРАНИТЬ", key=f"s_{emp}"):
                         edited['Исполнитель'] = emp
                         updated = pd.concat([all_data[all_data['Исполнитель'] != emp], archived_tasks[archived_tasks['Исполнитель'] == emp], edited], ignore_index=True)
@@ -189,62 +185,53 @@ with tab_tasks:
     with st.expander("📦 АРХИВ И ПОИСК"):
         if not archived_tasks.empty:
             search = st.text_input("🔍 Поиск по архиву:", "").lower()
-            filt_arch = archived_tasks[archived_tasks['Задача'].str.lower().str.contains(search, na=False) |
-                                       archived_tasks['Исполнитель'].str.lower().str.contains(search, na=False)]
-            ed_arch = st.data_editor(filt_arch, use_container_width=True, num_rows="dynamic", key="ae")
-            if st.button("🔄 ПРИМЕНИТЬ ИЗМЕНЕНИЯ"):
-                others = all_data.drop(archived_tasks.index)
-                final = pd.concat([others, ed_arch], ignore_index=True)
-                final.to_csv(DB_FILE, index=False); st.session_state.df = final; st.rerun()
+            filt_arch = archived_tasks[archived_tasks['Задача'].str.lower().str.contains(search, na=False)]
+            st.dataframe(filt_arch, use_container_width=True)
 
 with tab_charts:
     if not all_data.empty:
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Всего", len(all_data)); m2.metric("В работе", len(active_tasks))
-        m3.metric("Завершено", len(archived_tasks)); m4.metric("Срочные", len(all_data[all_data['Приоритет'] == "Высокий 🔥"]))
-        c1, c2 = st.columns(2)
-        with c1: st.plotly_chart(px.pie(all_data, names='Статус', hole=0.4, title="Статусы"), use_container_width=True)
-        with c2: 
-            if not active_tasks.empty:
-                load = active_tasks['Исполнитель'].value_counts().reset_index()
-                st.plotly_chart(px.bar(load, x='Исполнитель', y='count', title="Нагрузка", color_discrete_sequence=[accent_color]), use_container_width=True)
+        st.plotly_chart(px.pie(all_data, names='Статус', title="Статусы"), use_container_width=True)
         output = BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer: all_data.to_excel(writer, index=False)
-        st.download_button(label="📊 СКАЧАТЬ EXCEL", data=output.getvalue(), file_name=f"report_{date.today()}.xlsx")
+        st.download_button(label="📊 СКАЧАТЬ EXCEL", data=output.getvalue(), file_name="tasks.xlsx")
 
 with tab_chat:
-    st.markdown("### 💬 Корпоративный мессенджер")
+    st.markdown("### 💬 Чат")
     with st.container(border=True):
-        col_msg, col_btn = st.columns([4, 1])
-        new_msg = col_msg.text_input("Напишите сообщение...", key="chat_input", label_visibility="collapsed")
-        if col_btn.button("Отправить", use_container_width=True):
-            if new_msg:
-                st.session_state.messages.append({
-                    "id": datetime.now().timestamp(),
-                    "user": user_name,
-                    "text": new_msg,
-                    "time": datetime.now().strftime("%H:%M"),
-                    "reactions": {"👍": 0, "🔥": 0, "😂": 0, "✅": 0}
-                })
-                save_chat(st.session_state.messages); st.rerun()
+        col_m, col_b = st.columns([4, 1])
+        msg_text = col_m.text_input("Сообщение", key="msg_input", label_visibility="collapsed")
+        if col_b.button("Отправить") and msg_text:
+            st.session_state.messages.append({
+                "id": datetime.now().timestamp(),
+                "user": user_name,
+                "text": msg_text,
+                "time": datetime.now().strftime("%H:%M"),
+                "reactions": {"👍": 0, "🔥": 0, "✅": 0}
+            })
+            save_chat(st.session_state.messages); st.rerun()
 
-    for i, msg in enumerate(reversed(st.session_state.messages)):
-        idx = len(st.session_state.messages) - 1 - i
-        with st.container():
-            st.markdown(f"""<div class="chat-msg"><b>{msg['user']}</b> <span style='float:right; font-size:12px; opacity:0.6'>{msg['time']}</span><br>{msg['text']}</div>""", unsafe_allow_html=True)
-            r_cols = st.columns([0.5, 0.5, 0.5, 0.5, 2, 1, 1])
-            for j, emoji in enumerate(msg['reactions'].keys()):
-                if r_cols[j].button(f"{emoji} {msg['reactions'][emoji]}", key=f"react_{idx}_{emoji}"):
-                    st.session_state.messages[idx]['reactions'][emoji] += 1
+    for idx, msg in enumerate(reversed(st.session_state.messages)):
+        real_idx = len(st.session_state.messages) - 1 - idx
+        with st.container(border=True):
+            st.write(f"**{msg['user']}** ({msg['time']})")
+            st.write(msg['text'])
+            
+            # Проверка наличия ключа 'reactions' во избежание ошибки со скриншота
+            if 'reactions' not in msg or not isinstance(msg['reactions'], dict):
+                msg['reactions'] = {"👍": 0, "🔥": 0, "✅": 0}
+            
+            cols = st.columns([1,1,1,4,1,1])
+            for i, (emoji, count) in enumerate(msg['reactions'].items()):
+                if cols[i].button(f"{emoji} {count}", key=f"r_{real_idx}_{emoji}"):
+                    st.session_state.messages[real_idx]['reactions'][emoji] += 1
                     save_chat(st.session_state.messages); st.rerun()
+            
             if msg['user'] == user_name:
-                if r_cols[5].button("✏️", key=f"edit_{idx}"):
-                    # В этой версии просто открываем поле ввода для замены
-                    new_t = st.text_input("Изменить:", value=msg['text'], key=f"edit_inp_{idx}")
-                    if st.button("Ок", key=f"save_edit_{idx}"):
-                        st.session_state.messages[idx]['text'] = new_t
+                if cols[4].button("✏️", key=f"ed_{real_idx}"):
+                    new_val = st.text_input("Редактировать", value=msg['text'], key=f"val_{real_idx}")
+                    if st.button("Ок", key=f"btn_{real_idx}"):
+                        st.session_state.messages[real_idx]['text'] = new_val
                         save_chat(st.session_state.messages); st.rerun()
-                if r_cols[6].button("🗑️", key=f"del_{idx}"):
-                    st.session_state.messages.pop(idx)
+                if cols[5].button("🗑️", key=f"dl_{real_idx}"):
+                    st.session_state.messages.pop(real_idx)
                     save_chat(st.session_state.messages); st.rerun()
-            st.divider()
