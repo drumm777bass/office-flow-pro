@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Office Flow Pro</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        body { background: #f8fafc; padding: 40px; }
+        .card { border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1 class="mb-4">📊 Office Flow Pro (Flask)</h1>
+
+    <div class="card p-4 mb-4">
+        <h4>➕ Добавить задачу</h4>
+        <form action="/add" method="post" class="row g-3">
+            <div class="col-md-3"><input type="text" name="task" class="form-control" placeholder="Задача" required></div>
+            <div class="col-md-3"><input type="text" name="user" class="form-control" placeholder="Исполнитель" required></div>
+            <div class="col-md-3"><input type="date" name="deadline" class="form-control" required></div>
+            <div class="col-md-2">
+                <select name="priority" class="form-select">
+                    <option>Высокий 🔥</option>
+                    <option>Средний ⚡</option>
+                    <option>Низкий 🧊</option>
+                </select>
+            </div>
+            <div class="col-md-1"><button type="submit" class="btn btn-primary">ОК</button></div>
+        </form>
+    </div>
+
+    <div class="card p-4">
+        <h4>📋 Список задач</h4>
+        <table class="table table-hover">
+            <thead><tr><th>Задача</th><th>Кто</th><th>Статус</th><th>Приоритет</th><th>Дедлайн</th></tr></thead>
+            <tbody>
+            {% for task in tasks %}
+            <tr>
+                <td>{{ task['Задача'] }}</td>
+                <td>{{ task['Исполнитель'] }}</td>
+                <td><span class="badge bg-secondary">{{ task['Статус'] }}</span></td>
+                <td>{{ task['Приоритет'] }}</td>
+                <td>{{ task['Дедлайн'] }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+</body>
+</html>
