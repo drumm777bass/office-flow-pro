@@ -82,7 +82,7 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 4. ДАННЫЕ (ЗАДАЧИ И ЧАТ) ---
+# --- 4. ДАННЫЕ ---
 DB_FILE = 'tasks.csv'
 CHAT_FILE = 'chat_history.csv'
 
@@ -144,7 +144,6 @@ with st.sidebar:
 st.title("📊 Office Flow Pro + Chat")
 tab_tasks, tab_charts, tab_chat = st.tabs(["📋 ПАНЕЛЬ ЗАДАЧ", "📈 АНАЛИТИКА", "💬 ЧАТ"])
 
-# --- ВКЛАДКА ЗАДАЧ (БЕЗ ИЗМЕНЕНИЙ) ---
 with tab_tasks:
     all_data['Дедлайн'] = pd.to_datetime(all_data['Дедлайн']).dt.date
     active_tasks = all_data[all_data['Статус'] != '🟢 Выполнено'].copy()
@@ -186,7 +185,18 @@ with tab_tasks:
                         updated.to_csv(DB_FILE, index=False); st.session_state.df = updated; st.rerun()
         else: st.info("Активных задач нет.")
 
-# --- ВКЛАДКА АНАЛИТИКИ (БЕЗ ИЗМЕНЕНИЙ) ---
+    st.divider()
+    with st.expander("📦 АРХИВ И ПОИСК"):
+        if not archived_tasks.empty:
+            search = st.text_input("🔍 Поиск по архиву:", "").lower()
+            filt_arch = archived_tasks[archived_tasks['Задача'].str.lower().str.contains(search, na=False) |
+                                       archived_tasks['Исполнитель'].str.lower().str.contains(search, na=False)]
+            ed_arch = st.data_editor(filt_arch, use_container_width=True, num_rows="dynamic", key="ae")
+            if st.button("🔄 ПРИМЕНИТЬ ИЗМЕНЕНИЯ"):
+                others = all_data.drop(archived_tasks.index)
+                final = pd.concat([others, ed_arch], ignore_index=True)
+                final.to_csv(DB_FILE, index=False); st.session_state.df = final; st.rerun()
+
 with tab_charts:
     if not all_data.empty:
         m1, m2, m3, m4 = st.columns(4)
@@ -202,11 +212,8 @@ with tab_charts:
         with pd.ExcelWriter(output, engine='openpyxl') as writer: all_data.to_excel(writer, index=False)
         st.download_button(label="📊 СКАЧАТЬ EXCEL", data=output.getvalue(), file_name=f"report_{date.today()}.xlsx")
 
-# --- ВКЛАДКА ЧАТА (НОВАЯ) ---
 with tab_chat:
     st.markdown("### 💬 Корпоративный мессенджер")
-    
-    # Ввод сообщения
     with st.container(border=True):
         col_msg, col_btn = st.columns([4, 1])
         new_msg = col_msg.text_input("Напишите сообщение...", key="chat_input", label_visibility="collapsed")
@@ -219,33 +226,25 @@ with tab_chat:
                     "time": datetime.now().strftime("%H:%M"),
                     "reactions": {"👍": 0, "🔥": 0, "😂": 0, "✅": 0}
                 })
-                save_chat(st.session_state.messages)
-                st.rerun()
+                save_chat(st.session_state.messages); st.rerun()
 
-    # Отображение сообщений (в обратном порядке)
     for i, msg in enumerate(reversed(st.session_state.messages)):
         idx = len(st.session_state.messages) - 1 - i
         with st.container():
             st.markdown(f"""<div class="chat-msg"><b>{msg['user']}</b> <span style='float:right; font-size:12px; opacity:0.6'>{msg['time']}</span><br>{msg['text']}</div>""", unsafe_allow_html=True)
-            
-            # Реакции и управление
             r_cols = st.columns([0.5, 0.5, 0.5, 0.5, 2, 1, 1])
-            
-            # Кнопки реакций
             for j, emoji in enumerate(msg['reactions'].keys()):
                 if r_cols[j].button(f"{emoji} {msg['reactions'][emoji]}", key=f"react_{idx}_{emoji}"):
                     st.session_state.messages[idx]['reactions'][emoji] += 1
                     save_chat(st.session_state.messages); st.rerun()
-            
-            # Удаление и Редактирование (только для автора)
             if msg['user'] == user_name:
-                if r_cols[5].button("✏️", key=f"edit_{idx}", help="Изменить"):
-                    new_text = st.text_input("Редактировать:", value=msg['text'], key=f"inp_{idx}")
-                    if st.button("Ок", key=f"ok_{idx}"):
-                        st.session_state.messages[idx]['text'] = new_text
+                if r_cols[5].button("✏️", key=f"edit_{idx}"):
+                    # В этой версии просто открываем поле ввода для замены
+                    new_t = st.text_input("Изменить:", value=msg['text'], key=f"edit_inp_{idx}")
+                    if st.button("Ок", key=f"save_edit_{idx}"):
+                        st.session_state.messages[idx]['text'] = new_t
                         save_chat(st.session_state.messages); st.rerun()
-                
-                if r_cols[6].button("🗑️", key=f"del_{idx}", help="Удалить"):
+                if r_cols[6].button("🗑️", key=f"del_{idx}"):
                     st.session_state.messages.pop(idx)
                     save_chat(st.session_state.messages); st.rerun()
             st.divider()
