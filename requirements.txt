@@ -1,4 +1,5 @@
-streamlit
+flask
 pandas
+gspread
+oauth2client
 plotly
-openpyxl
